@@ -313,7 +313,6 @@
   <div class="modal" id="adminSettingsModal">
     <div class="modal-content">
       <h3>إدارة المسؤولين</h3>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">الحسابات المسجلة في النظام والمزامنة:</p>
       <div id="usersListContainer" style="max-height: 250px; overflow-y: auto; margin-bottom: 10px;"></div>
       <button class="btn btn-secondary" onclick="closeModal('adminSettingsModal')">إغلاق</button>
     </div>
@@ -355,6 +354,7 @@
     const SUPABASE_KEY = 'sb_publishable_36v9DdUV116TIrOrlGje9w_sBQmrn7s';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // افتراضي محلي يمنع فقدان البيانات تماماً
     let categories = JSON.parse(localStorage.getItem('awlad_issa_cats')) || [
       { id: '1', name: 'بقالة ومواد غذائية', icon: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80' },
       { id: '2', name: 'ألبان وأجبان', icon: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=200&q=80' },
@@ -394,6 +394,7 @@
 
     async function syncWithSupabase() {
       try {
+        // سحب البيانات من Supabase ودمجها محلياً
         let { data: catData } = await supabaseClient.from('categories').select('*');
         if (catData && catData.length > 0) {
           categories = catData;
@@ -421,7 +422,7 @@
           localStorage.setItem('awlad_issa_users', JSON.stringify(registeredUsers));
         }
       } catch (err) {
-        console.log("الاعتماد على التخزين المحلي:", err);
+        console.log("الاعتماد على التخزين المحلي لعدم توفر الشبكة اللحظية:", err);
       }
     }
 
@@ -486,13 +487,14 @@
       registeredUsers.push(newUser);
       localStorage.setItem('awlad_issa_users', JSON.stringify(registeredUsers));
 
+      // حفظ سحابي في الخلفية
       try { await supabaseClient.from('users').upsert([newUser]); } catch(e){}
 
       currentUser = newUser;
       localStorage.setItem('awlad_issa_session', JSON.stringify(currentUser));
       document.getElementById('authOverlay').style.display = 'none';
       setupUserSession();
-      alert('تم إنشاء الحساب بنجاح وتم مزامنته!');
+      alert('تم إنشاء الحساب بنجاح!');
     }
 
     function logout() {
@@ -533,29 +535,8 @@
       searchProducts();
     }
 
-    function openModal(id) {
-      document.getElementById(id).classList.add('active');
-      if (id === 'adminSettingsModal') {
-        renderUsersList();
-      }
-    }
-    
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); if(id==='scannerModal') stopScanner(); }
-
-    function renderUsersList() {
-      const container = document.getElementById('usersListContainer');
-      container.innerHTML = '';
-      if (registeredUsers.length === 0) {
-        container.innerHTML = '<p style="text-align:center; color:var(--text-muted);">لا توجد حسابات مسجلة.</p>';
-        return;
-      }
-      registeredUsers.forEach((usr, idx) => {
-        const div = document.createElement('div');
-        div.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:var(--bg); border:1px solid var(--card-border); padding:8px 12px; border-radius:8px; margin-bottom:6px;";
-        div.innerHTML = `<span><b>${usr.username}</b> (${usr.role === 'admin' ? 'مدير' : 'مستخدم'})</span> <span style="font-size:11px; color:var(--text-muted);">كلمة السر: ${usr.pass}</span>`;
-        container.appendChild(div);
-      });
-    }
 
     function renderCategories() {
       const container = document.getElementById('categoriesContainer');
@@ -766,7 +747,7 @@
       document.getElementById('pImgUrl').value = '';
 
       if (activeCategoryName) showProductsOfCategory(activeCategoryName);
-      alert('تم الحفظ والمزامنة بنجاح!');
+      alert('تم الحفظ بنجاح!');
     }
 
     function triggerEditProductFromModal() {
