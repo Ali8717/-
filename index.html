@@ -370,10 +370,11 @@
     </div>
   </div>
 
-  <!-- سكربت فايربيس -->
+  <!-- سكربت فايربيس وقاعدة البيانات الحية -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+    import { getFirestore, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDMw3Eiv_-0wjBwHJ0XaMM4da32bG8BryM",
@@ -387,37 +388,38 @@
 
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);[cite: 4]
+    const db = getFirestore(app);
+
+    // ربط المتغيرات العامة بدوال الإدارة
+    window.db = db;
+    window.collection = collection;
+    window.getDocs = getDocs;
+    window.addDoc = addDoc;
+    window.doc = doc;
+    window.updateDoc = updateDoc;
+    window.deleteDoc = deleteDoc;
+    window.onSnapshot = onSnapshot;
+    window.setDoc = setDoc;
+    window.getDoc = getDoc;
+
+    // تشغيل الاستماع الحي للبيانات
+    initRealtimeSync();
   </script>
 
-  <!-- سكربت إدارة المتجر -->
+  <!-- سكربت إدارة المتجر والربط -->
   <script>
-    let categories = JSON.parse(localStorage.getItem('awlad_issa_categories')) || [
-      { id: '1', name: 'بقالة ومواد غذائية', icon: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80' },
-      { id: '2', name: 'ألبان وأجبان', icon: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=200&q=80' },
-      { id: '3', name: 'خضار وفواكه', icon: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=200&q=80' }
-    ];
+    let categories = [];
+    let products = [];
+    let incomingOrders = [];
+    let registeredUsers = [];
 
-    let products = JSON.parse(localStorage.getItem('awlad_issa_products')) || [];
     let cart = JSON.parse(localStorage.getItem('awlad_issa_cart')) || [];
-    let incomingOrders = JSON.parse(localStorage.getItem('awlad_issa_orders')) || [];
-    let registeredUsers = JSON.parse(localStorage.getItem('awlad_issa_real_users')) || [];
-
-    let mainAdmin = registeredUsers.find(u => u.username === 'ali70');
-    if (!mainAdmin) {
-      mainAdmin = { username: 'ali70', pass: '70481570', role: 'admin' };
-      registeredUsers.unshift(mainAdmin);
-    } else {
-      mainAdmin.role = 'admin';
-      mainAdmin.pass = '70481570';
-    }
-    localStorage.setItem('awlad_issa_real_users', JSON.stringify(registeredUsers));
-
     let currentUser = JSON.parse(localStorage.getItem('awlad_issa_session')) || null;
     let activeProduct = null;
     let modalSelectedQty = 1;
     let html5QrCode = null;
 
-    function initApp() {
+    function initRealtimeSync() {
       if (localStorage.getItem('awlad_issa_theme') === 'dark') {
         document.documentElement.setAttribute('data-theme', 'dark');
       }
@@ -427,9 +429,57 @@
         document.getElementById('authOverlay').style.display = 'none';
         setupUserSession();
       }
-      renderCategories();
+
+      // جذب الأقسام بشكل حي
+      window.onSnapshot(window.collection(window.db, "categories"), (snapshot) => {
+        categories = [];
+        snapshot.forEach((docSnap) => {
+          categories.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        if (categories.length === 0) {
+          // إضافة أقسام افتراضية لو القاعدة فاضية
+          const defaults = [
+            { name: 'بقالة ومواد غذائية', icon: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80' },
+            { name: 'ألبان وأجبان', icon: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=200&q=80' },
+            { name: 'خضار وفواكه', icon: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=200&q=80' }
+          ];
+          defaults.forEach(d => window.addDoc(window.collection(window.db, "categories"), d));
+        }
+        renderCategories();
+      });
+
+      // جذب المنتجات بشكل حي
+      window.onSnapshot(window.collection(window.db, "products"), (snapshot) => {
+        products = [];
+        snapshot.forEach((docSnap) => {
+          products.push({ firestoreId: docSnap.id, ...docSnap.data() });
+        });
+        renderProductGrid(products);
+      });
+
+      // جذب الطلبات بشكل حي
+      window.onSnapshot(window.collection(window.db, "orders"), (snapshot) => {
+        incomingOrders = [];
+        snapshot.forEach((docSnap) => {
+          incomingOrders.push({ firestoreId: docSnap.id, ...docSnap.data() });
+        });
+        updateOrdersBadge();
+      });
+
+      // جذب المستخدمين
+      window.onSnapshot(window.collection(window.db, "users"), (snapshot) => {
+        registeredUsers = [];
+        snapshot.forEach((docSnap) => {
+          registeredUsers.push(docSnap.data());
+        });
+        let mainAdmin = registeredUsers.find(u => u.username === 'ali70');
+        if (!mainAdmin) {
+          const adminObj = { username: 'ali70', pass: '70481570', role: 'admin' };
+          window.setDoc(window.doc(window.db, "users", "ali70"), adminObj);
+        }
+      });
+
       updateCartBadge();
-      updateOrdersBadge();
     }
 
     function toggleThemeMode() {
@@ -468,14 +518,13 @@
       } else { alert("اسم المستخدم أو كلمة السر غير صحيحة!"); }
     }
 
-    function handleAuthRegister() {
+    async function handleAuthRegister() {
       const u = document.getElementById('regUser').value.trim();
       const p = document.getElementById('regPass').value.trim();
       if (!u || !p) return;
       if (registeredUsers.some(user => user.username === u)) { alert("موجود بالفعل!"); return; }
       const newUser = { username: u, pass: p, role: 'user' };
-      registeredUsers.push(newUser);
-      localStorage.setItem('awlad_issa_real_users', JSON.stringify(registeredUsers));
+      await window.setDoc(window.doc(window.db, "users", u), newUser);
       currentUser = newUser;
       localStorage.setItem('awlad_issa_session', JSON.stringify(currentUser));
       document.getElementById('authOverlay').style.display = 'none';
@@ -518,6 +567,7 @@
 
     function renderProductGrid(items) {
       const container = document.getElementById('productsContainer');
+      if (!container) return;
       container.innerHTML = '';
       if (items.length === 0) {
         container.innerHTML = `<p style="grid-column: 1/-1; text-align:center; color:var(--text-muted); padding:30px 0;">لا توجد منتجات.</p>`;
@@ -525,7 +575,7 @@
       }
       items.forEach(p => {
         container.innerHTML += `
-          <div class="product-card" onclick="onProductClick(${p.id})">
+          <div class="product-card" onclick="onProductClick('${p.firestoreId}')">
             <div class="product-img-box"><img src="${p.image || 'https://via.placeholder.com/150'}"></div>
             <div class="product-title">${p.name}</div>
             <div class="product-price">${p.price} ج.م</div>
@@ -534,8 +584,8 @@
       });
     }
 
-    function onProductClick(id) {
-      activeProduct = products.find(p => p.id === id);
+    function onProductClick(firestoreId) {
+      activeProduct = products.find(p => p.firestoreId === firestoreId);
       if (!activeProduct) return;
       modalSelectedQty = 1;
       document.getElementById('modalProductName').innerText = activeProduct.name;
@@ -554,7 +604,7 @@
 
     function addToCartFromModal() {
       if (!activeProduct) return;
-      const existing = cart.find(item => item.id === activeProduct.id);
+      const existing = cart.find(item => item.firestoreId === activeProduct.firestoreId);
       if (existing) { existing.qty += modalSelectedQty; }
       else { cart.push({ ...activeProduct, qty: modalSelectedQty }); }
       localStorage.setItem('awlad_issa_cart', JSON.stringify(cart));
@@ -563,7 +613,8 @@
     }
 
     function updateCartBadge() {
-      document.getElementById('cartCountBadge').innerText = cart.reduce((sum, item) => sum + item.qty, 0);
+      const badge = document.getElementById('cartCountBadge');
+      if (badge) badge.innerText = cart.reduce((sum, item) => sum + item.qty, 0);
     }
 
     function renderCart() {
@@ -602,21 +653,20 @@
       openModal('onlineOrderModal');
     }
 
-    function submitOnlineOrder() {
+    async function submitOnlineOrder() {
       const address = document.getElementById('orderAddress').value.trim();
       const phone = document.getElementById('orderPhone').value.trim();
       if (!address || !phone) return;
 
-      incomingOrders.unshift({
-        id: Date.now(),
+      const newOrder = {
         client: currentUser.username,
         address, phone,
         items: [...cart],
         total: cart.reduce((sum, item) => sum + (Number(item.price) * item.qty), 0).toFixed(2),
         time: new Date().toLocaleTimeString('ar-EG')
-      });
-      localStorage.setItem('awlad_issa_orders', JSON.stringify(incomingOrders));
-      updateOrdersBadge();
+      };
+
+      await window.addDoc(window.collection(window.db, "orders"), newOrder);
 
       cart = [];
       localStorage.setItem('awlad_issa_cart', JSON.stringify(cart));
@@ -627,7 +677,8 @@
     }
 
     function updateOrdersBadge() {
-      document.getElementById('ordersCountBadge').innerText = incomingOrders.length;
+      const badge = document.getElementById('ordersCountBadge');
+      if (badge) badge.innerText = incomingOrders.length;
     }
 
     function renderOrdersList() {
@@ -637,17 +688,22 @@
         container.innerHTML = `<p style="text-align:center; color:var(--text-muted);">لا توجد طلبات.</p>`;
         return;
       }
-      incomingOrders.forEach((o, idx) => {
+      incomingOrders.forEach((o) => {
         container.innerHTML += `
           <div style="border:1px solid var(--card-border); padding:10px; margin-bottom:8px; border-radius:8px;">
             <b>العميل: ${o.client}</b> - ${o.total} ج.م
-            <button onclick="incomingOrders.splice(${idx},1); localStorage.setItem('awlad_issa_orders', JSON.stringify(incomingOrders)); renderOrdersList(); updateOrdersBadge();" style="float:left; background:#ef4444; color:white; border:none; padding:2px 6px; border-radius:4px;">حذف</button>
+            <button onclick="deleteOrder('${o.firestoreId}')" style="float:left; background:#ef4444; color:white; border:none; padding:2px 6px; border-radius:4px;">حذف</button>
           </div>
         `;
       });
     }
 
-    function saveProduct() {
+    async function deleteOrder(id) {
+      await window.deleteDoc(window.doc(window.db, "orders", id));
+      renderOrdersList();
+    }
+
+    async function saveProduct() {
       const id = document.getElementById('editProductId').value;
       const name = document.getElementById('pName').value;
       const price = document.getElementById('pPrice').value;
@@ -656,13 +712,12 @@
       const image = document.getElementById('pImgUrl').value || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&q=80';
 
       if (!name || !price) return;
+
       if (id) {
-        const idx = products.findIndex(p => p.id == id);
-        if (idx !== -1) products[idx] = { id: Number(id), name, price, barcode, category, image };
+        await window.updateDoc(window.doc(window.db, "products", id), { name, price, barcode, category, image });
       } else {
-        products.push({ id: Date.now(), name, price, barcode, category, image });
+        await window.addDoc(window.collection(window.db, "products"), { name, price, barcode, category, image });
       }
-      localStorage.setItem('awlad_issa_products', JSON.stringify(products));
       closeModal('addProductModal');
       showHome();
     }
@@ -670,7 +725,7 @@
     function triggerEditProductFromModal() {
       closeModal('userProductModal');
       document.getElementById('productModalTitle').innerText = "تعديل المنتج";
-      document.getElementById('editProductId').value = activeProduct.id;
+      document.getElementById('editProductId').value = activeProduct.firestoreId;
       document.getElementById('pName').value = activeProduct.name;
       document.getElementById('pPrice').value = activeProduct.price;
       document.getElementById('pBarcode').value = activeProduct.barcode || '';
@@ -679,9 +734,8 @@
       openModal('addProductModal');
     }
 
-    function deleteProductFromModal() {
-      products = products.filter(p => p.id !== activeProduct.id);
-      localStorage.setItem('awlad_issa_products', JSON.stringify(products));
+    async function deleteProductFromModal() {
+      await window.deleteDoc(window.doc(window.db, "products", activeProduct.firestoreId));
       closeModal('userProductModal');
       showHome();
     }
@@ -725,21 +779,17 @@
       });
     }
 
-    function saveNewCategory() {
+    async function saveNewCategory() {
       const name = document.getElementById('newCatName').value.trim();
       const icon = document.getElementById('newCatIcon').value.trim() || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80';
       if (!name) return;
-      categories.push({ id: String(Date.now()), name, icon });
-      localStorage.setItem('awlad_issa_categories', JSON.stringify(categories));
-      renderCategories();
+      await window.addDoc(window.collection(window.db, "categories"), { name, icon });
       closeModal('addCategoryModal');
     }
 
     function showHome() { document.getElementById('categoriesView').style.display = 'block'; document.getElementById('productsView').style.display = 'none'; }
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
-    initApp();
   </script>
 </body>
 </html>
