@@ -26,11 +26,9 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // ربط البيانات بالمتغيرات العامة لتتزامن لحظياً
     window.db = db;
     window.isCloudReady = true;
     
-    // تشغيل دالة الاستماع للتحديثات فور تحميل الصفحة
     window.initCloudSync();
   </script>
   
@@ -494,17 +492,14 @@
     let html5QrCode = null;
     let pressTimer = null;
 
-    // دالة الاستماع الفوري من Firebase (تحديثات لحظية)
     window.initCloudSync = async function() {
       const { collection, onSnapshot, getDocs, setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
       
-      // جلب ومزامنة الفئات
       onSnapshot(collection(window.db, "categories"), (snapshot) => {
         if (!snapshot.empty) {
           categories = [];
           snapshot.forEach(docSnap => { categories.push(docSnap.data()); });
         } else {
-          // رفع الفئات الافتراضية لأول مرة
           categories.forEach(async (cat) => {
             await setDoc(doc(window.db, "categories", cat.id), cat);
           });
@@ -512,7 +507,6 @@
         renderCategories();
       });
 
-      // جلب ومزامنة المنتجات
       onSnapshot(collection(window.db, "products"), (snapshot) => {
         products = [];
         snapshot.forEach(docSnap => { products.push(docSnap.data()); });
@@ -522,14 +516,12 @@
         }
       });
 
-      // جلب ومزامنة الطلبات الواردة
       onSnapshot(collection(window.db, "orders"), (snapshot) => {
         incomingOrders = [];
         snapshot.forEach(docSnap => { incomingOrders.push(docSnap.data()); });
         updateOrdersBadge();
       });
 
-      // جلب ومزامنة المستخدمين
       onSnapshot(collection(window.db, "users"), (snapshot) => {
         registeredUsers = [];
         snapshot.forEach(docSnap => { registeredUsers.push(docSnap.data()); });
@@ -596,36 +588,35 @@
     function handleAuthLogin() {
       const u = document.getElementById('authUser').value.trim();
       const p = document.getElementById('authPass').value.trim();
-      const found = registeredUsers.find(user => user.username === u && user.pass === p);
+      const found = registeredUsers.find(x => x.username === u && x.pass === p);
       if (found) {
         currentUser = found;
         localStorage.setItem('awlad_issa_session', JSON.stringify(currentUser));
         document.getElementById('authOverlay').style.display = 'none';
         setupUserSession();
-      } else { alert("اسم المستخدم أو كلمة السر غير صحيحة!"); }
+      } else {
+        alert('اسم المستخدم أو كلمة السر غير صحيحة!');
+      }
     }
 
     async function handleAuthRegister() {
       const u = document.getElementById('regUser').value.trim();
       const p = document.getElementById('regPass').value.trim();
-      if (!u || !p) { alert("يرجى ملء كافة البيانات!"); return; }
-      if (registeredUsers.some(user => user.username === u)) { alert("اسم المستخدم موجود بالفعل!"); return; }
-      
+      if (!u || !p) {
+        alert('من فضلك ادخل اسم المستخدم وكلمة السر');
+        return;
+      }
+      if (registeredUsers.some(x => x.username === u)) {
+        alert('اسم المستخدم مستخدم مسبقاً!');
+        return;
+      }
       const newUser = { username: u, pass: p, role: 'user' };
       const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
       await setDoc(doc(window.db, "users", u), newUser);
-
       currentUser = newUser;
       localStorage.setItem('awlad_issa_session', JSON.stringify(currentUser));
       document.getElementById('authOverlay').style.display = 'none';
       setupUserSession();
-      alert("تم إنشاء حسابك بنجاح!");
-    }
-
-    function setupUserSession() {
-      document.getElementById('currentUserDisplay').innerText = currentUser.username;
-      const adminElements = document.querySelectorAll('.admin-only');
-      adminElements.forEach(el => { el.style.display = currentUser.role === 'admin' ? 'block' : 'none'; });
     }
 
     function logout() {
@@ -634,10 +625,191 @@
       location.reload();
     }
 
+    function setupUserSession() {
+      document.getElementById('currentUserDisplay').innerText = currentUser.username;
+      const adminElements = document.querySelectorAll('.admin-only');
+      adminElements.forEach(el => {
+        el.style.display = (currentUser.role === 'admin') ? 'inline-flex' : 'none';
+      });
+    }
+
+    function renderCategories() {
+      const container = document.getElementById('categoriesContainer');
+      container.innerHTML = '';
+      categories.forEach(cat => {
+        const div = document.createElement('div');
+        div.className = 'category-card';
+        div.innerHTML = `
+          <div class="category-img-box"><img src="${cat.icon}" alt="${cat.name}"></div>
+          <p>${cat.name}</p>
+        `;
+        div.onclick = () => selectCategory(cat.name);
+        if (currentUser && currentUser.role === 'admin') {
+          div.oncontextmenu = (e) => {
+            e.preventDefault();
+            openCategoryActionsModal(cat);
+          };
+          div.ontouchstart = () => {
+            pressTimer = setTimeout(() => {
+              openCategoryActionsModal(cat);
+            }, 600);
+          };
+          div.ontouchend = () => {
+            clearTimeout(pressTimer);
+          };
+        }
+        container.appendChild(div);
+      });
+      populateCategorySelect();
+    }
+
+    function populateCategorySelect() {
+      const select = document.getElementById('pCategory');
+      if (!select) return;
+      select.innerHTML = '';
+      categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.name;
+        opt.innerText = cat.name;
+        select.appendChild(opt);
+      });
+    }
+
+    function selectCategory(catName) {
+      activeCategoryName = catName;
+      document.getElementById('categoriesView').style.display = 'none';
+      document.getElementById('productsView').style.display = 'block';
+      document.getElementById('categoryTitle').innerText = catName;
+      const filtered = products.filter(p => p.category === catName);
+      renderProductGrid(filtered);
+    }
+
+    function showHome() {
+      document.getElementById('productsView').style.display = 'none';
+      document.getElementById('categoriesView').style.display = 'block';
+      activeCategoryName = null;
+    }
+
+    function renderProductGrid(list) {
+      const container = document.getElementById('productsContainer');
+      container.innerHTML = '';
+      if (list.length === 0) {
+        container.innerHTML = '<p style="grid-column: 1/-1; text-align:center; color:var(--text-muted); padding:20px;">لا توجد منتجات في هذه الفئة حالياً</p>';
+        return;
+      }
+      list.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `
+          <div class="product-img-box"><img src="${p.img || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80'}" alt="${p.name}"></div>
+          <div class="product-title">${p.name}</div>
+          <div class="product-price">${p.price} ج.م</div>
+        `;
+        card.onclick = () => openUserProductModal(p);
+        container.appendChild(card);
+      });
+    }
+
+    function searchProducts() {
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+      if (!query) {
+        if (activeCategoryName) {
+          selectCategory(activeCategoryName);
+        } else {
+          showHome();
+        }
+        return;
+      }
+      document.getElementById('categoriesView').style.display = 'none';
+      document.getElementById('productsView').style.display = 'block';
+      document.getElementById('categoryTitle').innerText = 'نتائج البحث';
+      const results = products.filter(p => p.name.toLowerCase().includes(query) || (p.barcode && p.barcode.toLowerCase() === query));
+      renderProductGrid(results);
+    }
+
+    function openUserProductModal(p) {
+      activeProduct = p;
+      modalSelectedQty = 1;
+      document.getElementById('modalProductName').innerText = p.name;
+      document.getElementById('modalProductPrice').innerText = p.price + ' ج.م';
+      document.getElementById('modalProductQty').innerText = modalSelectedQty;
+      document.getElementById('modalProductImg').src = p.img || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80';
+      
+      const adminActions = document.getElementById('adminProductActions');
+      if (currentUser && currentUser.role === 'admin') {
+        adminActions.style.display = 'block';
+      } else {
+        adminActions.style.display = 'none';
+      }
+      openModal('userProductModal');
+    }
+
+    function changeModalQty(val) {
+      modalSelectedQty += val;
+      if (modalSelectedQty < 1) modalSelectedQty = 1;
+      document.getElementById('modalProductQty').innerText = modalSelectedQty;
+    }
+
+    function addToCartFromModal() {
+      if (!activeProduct) return;
+      const existing = cart.find(item => item.id === activeProduct.id);
+      if (existing) {
+        existing.qty += modalSelectedQty;
+      } else {
+        cart.push({ ...activeProduct, qty: modalSelectedQty });
+      }
+      saveCart();
+      closeModal('userProductModal');
+      alert('تمت إضافة المنتج إلى السلة بنجاح!');
+    }
+
+    function saveCart() {
+      localStorage.setItem('awlad_issa_cart', JSON.stringify(cart));
+      updateCartBadge();
+    }
+
+    function updateCartBadge() {
+      const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
+      document.getElementById('cartCountBadge').innerText = totalCount;
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cartItemsContainer');
+      container.innerHTML = '';
+      if (cart.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:15px;">السلة فارغة حالياً</p>';
+        document.getElementById('cartTotalPrice').innerText = '0.00 ج.م';
+        return;
+      }
+      let totalPrice = 0;
+      cart.forEach((item, index) => {
+        totalPrice += item.price * item.qty;
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--card-border);';
+        div.innerHTML = `
+          <div style="flex:1;">
+            <div style="font-weight:700; font-size:13px;">${item.name}</div>
+            <div style="font-size:11px; color:var(--text-muted);">${item.price} ج.م × ${item.qty}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-weight:900; color:var(--primary); font-size:14px;">${item.price * item.qty} ج.م</span>
+            <button onclick="removeFromCart(${index})" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+      document.getElementById('cartTotalPrice').innerText = totalPrice.toFixed(2) + ' ج.م';
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      saveCart();
+      renderCart();
+    }
+
     function openOnlineOrderCheckout() {
       if (cart.length === 0) {
-        alert("سلة التسوق فارغة! أضف منتجات أولاً.");
-        showHome();
+        alert('السلة فارغة!');
         return;
       }
       closeModal('cartModal');
@@ -647,391 +819,250 @@
     async function submitOnlineOrder() {
       const address = document.getElementById('orderAddress').value.trim();
       const phone = document.getElementById('orderPhone').value.trim();
-
       if (!address || !phone) {
-        alert("يرجى إدخال العنوان ورقم التواصل!");
+        alert('من فضلك ادخل العنوان ورقم التليفون');
         return;
       }
-
-      let grandTotal = cart.reduce((sum, item) => sum + (Number(item.price) * item.qty), 0);
-      const orderId = String(Date.now());
-      
-      const newOrder = {
-        id: orderId,
-        client: currentUser.username,
+      const orderData = {
+        id: 'ORD-' + Date.now(),
+        user: currentUser.username,
         address: address,
         phone: phone,
-        items: [...cart],
-        total: grandTotal.toFixed(2),
-        time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+        items: cart,
+        total: cart.reduce((sum, item) => sum + (item.price * item.qty), 0),
+        time: new Date().toLocaleString()
       };
-
+      
       const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-      await setDoc(doc(window.db, "orders", orderId), newOrder);
-
-      alert(`تم إرسال طلبك الأونلاين بنجاح للأدمن!`);
+      await setDoc(doc(window.db, "orders", orderData.id), orderData);
       
       cart = [];
-      localStorage.setItem('awlad_issa_cart', JSON.stringify(cart));
-      updateCartBadge();
+      saveCart();
       closeModal('onlineOrderModal');
-      showHome();
+      alert('تم إرسال طلبك بنجاح! سيتم التواصل معك قريباً.');
     }
 
     function updateOrdersBadge() {
-      const badge = document.getElementById('ordersCountBadge');
-      if (badge) badge.innerText = incomingOrders.length;
+      document.getElementById('ordersCountBadge').innerText = incomingOrders.length;
     }
 
     function renderOrdersList() {
       const container = document.getElementById('incomingOrdersContainer');
       container.innerHTML = '';
       if (incomingOrders.length === 0) {
-        container.innerHTML = `<p style="text-align:center; color:var(--text-muted); padding:20px 0;">لا توجد طلبات واردة حالياً.</p>`;
+        container.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:15px;">لا توجد طلبات واردة حالياً</p>';
         return;
       }
-
-      incomingOrders.forEach((order) => {
-        let itemsList = order.items.map(i => `${i.name} (×${i.qty})`).join('، ');
-        container.innerHTML += `
-          <div style="background:var(--bg); border:1px solid var(--card-border); border-radius:12px; padding:12px; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-              <b style="color:var(--primary); font-size:13px;">العميل: ${order.client}</b>
-              <span style="font-size:11px; color:var(--text-muted);">${order.time}</span>
-            </div>
-            <p style="font-size:12px; margin-bottom:4px;"><b>العنوان:</b> ${order.address}</p>
-            <p style="font-size:12px; margin-bottom:6px;"><b>الهاتف:</b> ${order.phone}</p>
-            <p style="font-size:12px; margin-bottom:6px; color:var(--text-muted);"><b>المنتجات:</b> ${itemsList}</p>
-            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed var(--card-border); padding-top:6px; margin-top:6px;">
-              <b style="color:var(--primary); font-size:14px;">الإجمالي: ${order.total} ج.م</b>
-              <button onclick="deleteOrder('${order.id}')" style="background:#fee2e2; color:#ef4444; border:none; padding:4px 8px; border-radius:6px; font-size:11px; cursor:pointer;"><i class="fa-solid fa-check"></i> تم التسليم والحذف</button>
-            </div>
+      incomingOrders.forEach(ord => {
+        const div = document.createElement('div');
+        div.style.cssText = 'background:rgba(100,100,100,0.03); border:1px solid var(--card-border); border-radius:12px; padding:12px; margin-bottom:10px;';
+        let itemsHtml = ord.items.map(i => `<div style="font-size:11px; color:var(--text-muted);">• ${i.name} (×${i.qty})</div>`).join('');
+        div.innerHTML = `
+          <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:13px; margin-bottom:4px;">
+            <span>${ord.user} (${ord.phone})</span>
+            <span style="color:var(--primary);">${ord.total} ج.م</span>
           </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;"><i class="fa-solid fa-location-dot"></i> ${ord.address}</div>
+          <div style="margin-bottom:8px;">${itemsHtml}</div>
+          <button class="btn btn-danger" style="padding:6px; font-size:11px; margin-top:0;" onclick="deleteOrder('${ord.id}')">حذف الطلب</button>
         `;
+        container.appendChild(div);
       });
     }
 
-    async function deleteOrder(orderId) {
-      const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-      await deleteDoc(doc(window.db, "orders", orderId));
-      renderOrdersList();
-    }
-
-    function renderCategories() {
-      const catContainer = document.getElementById('categoriesContainer');
-      const catSelect = document.getElementById('pCategory');
-      if(!catContainer || !catSelect) return;
-      catContainer.innerHTML = '';
-      catSelect.innerHTML = '';
-
-      categories.forEach(cat => {
-        const card = document.createElement('div');
-        card.className = 'category-card';
-        card.innerHTML = `
-          <div class="category-img-box"><img src="${cat.icon}"></div>
-          <p>${cat.name}</p>
-        `;
-        card.onclick = () => openCategory(cat.name);
-        card.onmousedown = () => startLongPress(cat);
-        card.onttouchstart = () => startLongPress(cat);
-        card.onmouseup = cancelLongPress;
-        card.ontouchend = cancelLongPress;
-        card.onmouseleave = cancelLongPress;
-
-        catContainer.appendChild(card);
-        catSelect.innerHTML += `<option value="${cat.name}">${cat.name}</option>`;
-      });
-    }
-
-    function startLongPress(cat) {
-      if (!currentUser || currentUser.role !== 'admin') return;
-      pressTimer = setTimeout(() => {
-        activeCategoryName = cat.name;
-        document.getElementById('selectedCategoryTitleName').innerText = `إدارة فئة: ${cat.name}`;
-        document.getElementById('newCategoryIconUrl').value = cat.icon;
-        openModal('categoryActionsModal');
-      }, 600);
-    }
-    function cancelLongPress() { if (pressTimer) clearTimeout(pressTimer); }
-
-    function handleProductFileUpload(event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) { document.getElementById('pImgUrl').value = e.target.result; };
-        reader.readAsDataURL(file);
-      }
-    }
-    function handleCategoryUpdateFileUpload(event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) { document.getElementById('newCategoryIconUrl').value = e.target.result; };
-        reader.readAsDataURL(file);
-      }
-    }
-
-    async function saveCategoryIconUpdate() {
-      const newIcon = document.getElementById('newCategoryIconUrl').value.trim();
-      if (!newIcon) return;
-      const cat = categories.find(c => c.name === activeCategoryName);
-      if (cat) {
-        cat.icon = newIcon;
-        const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-        await setDoc(doc(window.db, "categories", cat.id), cat);
-        closeModal('categoryActionsModal');
-      }
-    }
-
-    async function deleteCategory() {
-      if (confirm(`حذف الفئة "${activeCategoryName}"؟`)) {
-        const cat = categories.find(c => c.name === activeCategoryName);
-        if (cat) {
-          const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-          await deleteDoc(doc(window.db, "categories", cat.id));
-          closeModal('categoryActionsModal');
-        }
-      }
-    }
-
-    async function saveNewCategory() {
-      const name = document.getElementById('newCatName').value.trim();
-      const icon = document.getElementById('newCatIcon').value.trim() || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80';
-      if (!name) return;
-      const newCat = { id: String(Date.now()), name, icon };
-      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-      await setDoc(doc(window.db, "categories", newCat.id), newCat);
-      closeModal('addCategoryModal');
-    }
-
-    function openCategory(catName) {
-      document.getElementById('categoriesView').style.display = 'none';
-      document.getElementById('productsView').style.display = 'block';
-      document.getElementById('categoryTitle').innerText = catName;
-      renderProductGrid(products.filter(p => p.category === catName));
-    }
-
-    function renderProductGrid(items) {
-      const container = document.getElementById('productsContainer');
-      container.innerHTML = '';
-      if (items.length === 0) {
-        container.innerHTML = `<p style="grid-column: 1/-1; text-align:center; color:var(--text-muted); padding:30px 0;">لا توجد منتجات.</p>`;
-        return;
-      }
-      items.forEach(p => {
-        container.innerHTML += `
-          <div class="product-card" onclick="onProductClick('${p.id}')">
-            <div class="product-img-box"><img src="${p.image || 'https://via.placeholder.com/150'}"></div>
-            <div class="product-title">${p.name}</div>
-            <div class="product-price">${p.price} ج.م</div>
-          </div>
-        `;
-      });
-    }
-
-    function onProductClick(id) {
-      activeProduct = products.find(p => p.id == id);
-      if (!activeProduct) return;
-      modalSelectedQty = 1;
-      document.getElementById('modalProductName').innerText = activeProduct.name;
-      document.getElementById('modalProductPrice').innerText = `${activeProduct.price} ج.م`;
-      document.getElementById('modalProductImg').src = activeProduct.image || 'https://via.placeholder.com/150';
-      document.getElementById('modalProductQty').innerText = modalSelectedQty;
-      document.getElementById('adminProductActions').style.display = (currentUser && currentUser.role === 'admin') ? 'block' : 'none';
-      openModal('userProductModal');
-    }
-
-    function changeModalQty(amt) {
-      modalSelectedQty += amt;
-      if (modalSelectedQty < 1) modalSelectedQty = 1;
-      document.getElementById('modalProductQty').innerText = modalSelectedQty;
-    }
-
-    function addToCartFromModal() {
-      if (!activeProduct) return;
-      const existing = cart.find(item => item.id === activeProduct.id);
-      if (existing) { existing.qty += modalSelectedQty; }
-      else { cart.push({ ...activeProduct, qty: modalSelectedQty }); }
-      localStorage.setItem('awlad_issa_cart', JSON.stringify(cart));
-      updateCartBadge();
-      closeModal('userProductModal');
-    }
-
-    function updateCartBadge() {
-      const badge = document.getElementById('cartCountBadge');
-      if(badge) badge.innerText = cart.reduce((sum, item) => sum + item.qty, 0);
-    }
-
-    function renderCart() {
-      const container = document.getElementById('cartItemsContainer');
-      const totalDisplay = document.getElementById('cartTotalPrice');
-      container.innerHTML = '';
-      if (cart.length === 0) {
-        container.innerHTML = `<p style="text-align:center; color:var(--text-muted); padding:20px 0;">السلة فارغة.</p>`;
-        totalDisplay.innerText = "0.00 ج.م";
-        return;
-      }
-      let grandTotal = 0;
-      cart.forEach((item, index) => {
-        const itemTotal = Number(item.price) * item.qty;
-        grandTotal += itemTotal;
-        container.innerHTML += `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--card-border);">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <img src="${item.image || 'https://via.placeholder.com/50'}" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">
-              <div>
-                <b style="font-size:13px; display:block;">${item.name}</b>
-                <span style="font-size:11px; color:var(--text-muted);">${item.price} ج.م × ${item.qty}</span>
-              </div>
-            </div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <b style="font-size:14px; color:var(--primary);">${itemTotal} ج.م</b>
-              <button onclick="removeFromCart(${index})" style="background:#fee2e2; color:#ef4444; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer;"><i class="fa-solid fa-trash"></i></button>
-            </div>
-          </div>
-        `;
-      });
-      totalDisplay.innerText = `${grandTotal.toFixed(2)} ج.م`;
-    }
-
-    function removeFromCart(index) {
-      cart.splice(index, 1);
-      localStorage.setItem('awlad_issa_cart', JSON.stringify(cart));
-      updateCartBadge();
-      renderCart();
-    }
-
-    function loadUsersList() {
-      const container = document.getElementById('usersListContainer');
-      container.innerHTML = '';
-      
-      registeredUsers.forEach((user) => {
-        let isMain = user.username === 'ali70';
-        let actionBtn = '';
-        
-        if (isMain) {
-          actionBtn = `<span style="font-size:11px; background:#dcfce7; color:#16a34a; padding:4px 8px; border-radius:6px; font-weight:bold;">المالك الأساسي</span>`;
-        } else if (user.role === 'admin') {
-          actionBtn = `<button onclick="toggleUserRole('${user.username}', 'user')" style="background:#fee2e2; color:#ef4444; border:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">إزالة الأدمن</button>`;
-        } else {
-          actionBtn = `<button onclick="toggleUserRole('${user.username}', 'admin')" style="background:rgba(16,185,129,0.15); color:var(--primary); border:none; padding:5px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">ترقية لأدمن</button>`;
-        }
-
-        container.innerHTML += `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--card-border);">
-            <div>
-              <b style="font-size:13px; display:block;">${user.username}</b>
-              <span style="font-size:11px; color:var(--text-muted);">الدور: ${user.role === 'admin' ? 'مشرف (Admin)' : 'مستخدم عادي'}</span>
-            </div>
-            <div>${actionBtn}</div>
-          </div>
-        `;
-      });
-    }
-
-    async function toggleUserRole(username, newRole) {
-      const targetUser = registeredUsers.find(u => u.username === username);
-      if (targetUser) {
-        targetUser.role = newRole;
-        const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-        await setDoc(doc(window.db, "users", username), targetUser);
-        loadUsersList();
+    async function deleteOrder(id) {
+      if (confirm('هل أنت متأكد من إتمام وحذف هذا الطلب؟')) {
+        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        await deleteDoc(doc(window.db, "orders", id));
       }
     }
 
     async function saveProduct() {
-      const id = document.getElementById('editProductId').value || String(Date.now());
-      const name = document.getElementById('pName').value;
-      const price = document.getElementById('pPrice').value;
-      const barcode = document.getElementById('pBarcode').value;
+      const id = document.getElementById('editProductId').value || 'PRD-' + Date.now();
+      const name = document.getElementById('pName').value.trim();
+      const price = parseFloat(document.getElementById('pPrice').value);
+      const barcode = document.getElementById('pBarcode').value.trim();
       const category = document.getElementById('pCategory').value;
-      const image = document.getElementById('pImgUrl').value || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&q=80';
+      const img = document.getElementById('pImgUrl').value.trim();
 
-      if (!name || !price) return;
-      const productObj = { id, name, price, barcode, category, image };
-      
+      if (!name || isNaN(price)) {
+        alert('من فضلك ادخل اسم المنتج والسعر بشكل صحيح');
+        return;
+      }
+
+      const productObj = { id, name, price, barcode, category, img };
       const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
       await setDoc(doc(window.db, "products", id), productObj);
 
       closeModal('addProductModal');
-      showHome();
+      document.getElementById('editProductId').value = '';
+      document.getElementById('pName').value = '';
+      document.getElementById('pPrice').value = '';
+      document.getElementById('pBarcode').value = '';
+      document.getElementById('pImgUrl').value = '';
+      alert('تم حفظ المنتج بنجاح وتحديثه سحابياً!');
     }
 
     function triggerEditProductFromModal() {
+      if (!activeProduct) return;
       closeModal('userProductModal');
-      document.getElementById('productModalTitle').innerText = "تعديل المنتج";
       document.getElementById('editProductId').value = activeProduct.id;
       document.getElementById('pName').value = activeProduct.name;
       document.getElementById('pPrice').value = activeProduct.price;
       document.getElementById('pBarcode').value = activeProduct.barcode || '';
       document.getElementById('pCategory').value = activeProduct.category;
-      document.getElementById('pImgUrl').value = activeProduct.image;
+      document.getElementById('pImgUrl').value = activeProduct.img || '';
+      document.getElementById('productModalTitle').innerText = 'تعديل المنتج';
       openModal('addProductModal');
     }
 
     async function deleteProductFromModal() {
-      const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
-      await deleteDoc(doc(window.db, "products", activeProduct.id));
-      closeModal('userProductModal');
-      showHome();
+      if (!activeProduct) return;
+      if (confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
+        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        await deleteDoc(doc(window.db, "products", activeProduct.id));
+        closeModal('userProductModal');
+        alert('تم حذف المنتج بنجاح!');
+      }
     }
 
-    function searchProducts() {
-      const q = document.getElementById('searchInput').value.toLowerCase();
-      if (!q) { showHome(); return; }
-      document.getElementById('categoriesView').style.display = 'none';
-      document.getElementById('productsView').style.display = 'block';
-      document.getElementById('categoryTitle').innerText = "نتائج البحث";
-      renderProductGrid(products.filter(p => p.name.toLowerCase().includes(q)));
+    function handleProductFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('pImgUrl').value = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function saveNewCategory() {
+      const name = document.getElementById('newCatName').value.trim();
+      const icon = document.getElementById('newCatIcon').value.trim();
+      if (!name) {
+        alert('ادخل اسم الفئة');
+        return;
+      }
+      const catObj = { id: 'CAT-' + Date.now(), name, icon: icon || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80' };
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      await setDoc(doc(window.db, "categories", catObj.id), catObj);
+      closeModal('addCategoryModal');
+      document.getElementById('newCatName').value = '';
+      document.getElementById('newCatIcon').value = '';
+      alert('تمت إضافة الفئة بنجاح!');
+    }
+
+    function openCategoryActionsModal(cat) {
+      document.getElementById('selectedCategoryTitleName').innerText = 'إدارة فئة: ' + cat.name;
+      document.getElementById('editCategoryNameTarget').value = cat.name;
+      document.getElementById('newCategoryIconUrl').value = cat.icon;
+      openModal('categoryActionsModal');
+    }
+
+    async function saveCategoryIconUpdate() {
+      const catName = document.getElementById('editCategoryNameTarget').value;
+      const newIcon = document.getElementById('newCategoryIconUrl').value.trim();
+      const targetCat = categories.find(c => c.name === catName);
+      if (!targetCat) return;
+      targetCat.icon = newIcon;
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      await setDoc(doc(window.db, "categories", targetCat.id), targetCat);
+      closeModal('categoryActionsModal');
+      alert('تم تحديث الأيقونة بنجاح!');
+    }
+
+    async function deleteCategory() {
+      const catName = document.getElementById('editCategoryNameTarget').value;
+      const targetCat = categories.find(c => c.name === catName);
+      if (!targetCat) return;
+      if (confirm('هل أنت متأكد من حذف هذه الفئة؟')) {
+        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        await deleteDoc(doc(window.db, "categories", targetCat.id));
+        closeModal('categoryActionsModal');
+        alert('تم حذف الفئة بنجاح!');
+      }
+    }
+
+    function handleCategoryUpdateFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('newCategoryIconUrl').value = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function loadUsersList() {
+      const container = document.getElementById('usersListContainer');
+      container.innerHTML = '';
+      registeredUsers.forEach(u => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:rgba(100,100,100,0.03); border:1px solid var(--card-border); border-radius:10px; padding:10px; margin-bottom:8px;';
+        div.innerHTML = `
+          <div>
+            <div style="font-weight:bold; font-size:13px;">${u.username}</div>
+            <div style="font-size:11px; color:var(--text-muted);">الصلاحية: ${u.role === 'admin' ? 'مسؤول (أدمن)' : 'مستخدم عادي'}</div>
+          </div>
+          <div>
+            ${u.username !== 'ali70' ? `<button class="btn" style="padding:6px 10px; font-size:11px; margin-top:0;" onclick="toggleUserRole('${u.username}', '${u.role}')">${u.role === 'admin' ? 'إزالة الأدمن' : 'ترقية لأدمن'}</button>` : '<span style="font-size:11px; color:var(--primary); font-weight:bold;">المؤسس</span>'}
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function toggleUserRole(username, currentRole) {
+      const newRole = currentRole === 'admin' ? 'user' : 'admin';
+      const userObj = registeredUsers.find(u => u.username === username);
+      if (userObj) {
+        userObj.role = newRole;
+        const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        await setDoc(doc(window.db, "users", username), userObj);
+        loadUsersList();
+      }
     }
 
     function startScanner() {
       openModal('scannerModal');
-      if (html5QrCode) {
-        html5QrCode.stop().catch(() => {}).finally(() => { initializeScannerInstance(); });
-      } else {
-        initializeScannerInstance();
-      }
-    }
-
-    function initializeScannerInstance() {
-      const containerId = "reader";
-      document.getElementById(containerId).innerHTML = "";
-      html5QrCode = new Html5Qrcode(containerId);
-      
-      html5QrCode.start(
-        { facingMode: "environment" }, 
-        { fps: 10, qrbox: { width: 250, height: 250 } }, 
-        (decodedText) => {
-          stopScanner();
-          closeModal('scannerModal');
-          document.getElementById('searchInput').value = decodedText;
-          searchProducts();
-        },
-        () => {}
-      ).catch((err) => {
-        console.error("خطأ في تشغيل الكاميرا:", err);
-      });
+      setTimeout(() => {
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 150 } },
+          (decodedText) => {
+            document.getElementById('searchInput').value = decodedText;
+            stopScanner();
+            closeModal('scannerModal');
+            searchProducts();
+          },
+          (error) => {}
+        ).catch(err => {
+          console.error("فشل تشغيل الكاميرا", err);
+        });
+      }, 300);
     }
 
     function stopScanner() {
       if (html5QrCode) {
         html5QrCode.stop().then(() => {
           html5QrCode.clear();
-          html5QrCode = null;
-        }).catch(() => { html5QrCode = null; });
+        }).catch(err => {});
       }
     }
 
-    function showHome() { 
-      document.getElementById('categoriesView').style.display = 'block'; 
-      document.getElementById('productsView').style.display = 'none'; 
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.add('active');
     }
-    
-    function openModal(id) { document.getElementById(id).classList.add('active'); }
-    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    setTimeout(initApp, 500);
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+      if (modalId === 'scannerModal') {
+        stopScanner();
+      }
+    }
+
+    window.onload = initApp;
   </script>
 </body>
 </html>
