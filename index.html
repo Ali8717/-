@@ -8,10 +8,10 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   
-  <!-- Firebase SDKs -->
+  <!-- Firebase SDKs (تم تعديل الإصدار إلى إصدار مستقر يعمل بدون أخطاء 404) -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-    import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDMw3Eiv_-0wjBwHJ0XaMM4da32bG8BryM",
@@ -493,7 +493,7 @@
     let pressTimer = null;
 
     window.initCloudSync = async function() {
-      const { collection, onSnapshot, getDocs, setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      const { collection, onSnapshot, getDocs, setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       
       onSnapshot(collection(window.db, "categories"), (snapshot) => {
         if (!snapshot.empty) {
@@ -611,7 +611,7 @@
         return;
       }
       const newUser = { username: u, pass: p, role: 'user' };
-      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       await setDoc(doc(window.db, "users", u), newUser);
       currentUser = newUser;
       localStorage.setItem('awlad_issa_session', JSON.stringify(currentUser));
@@ -833,7 +833,7 @@
         time: new Date().toLocaleString()
       };
       
-      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       await setDoc(doc(window.db, "orders", orderData.id), orderData);
       
       cart = [];
@@ -872,7 +872,7 @@
 
     async function deleteOrder(id) {
       if (confirm('هل أنت متأكد من إتمام وحذف هذا الطلب؟')) {
-        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
         await deleteDoc(doc(window.db, "orders", id));
       }
     }
@@ -891,7 +891,7 @@
       }
 
       const productObj = { id, name, price, barcode, category, img };
-      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       await setDoc(doc(window.db, "products", id), productObj);
 
       closeModal('addProductModal');
@@ -919,7 +919,7 @@
     async function deleteProductFromModal() {
       if (!activeProduct) return;
       if (confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
-        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
         await deleteDoc(doc(window.db, "products", activeProduct.id));
         closeModal('userProductModal');
         alert('تم حذف المنتج بنجاح!');
@@ -944,7 +944,7 @@
         return;
       }
       const catObj = { id: 'CAT-' + Date.now(), name, icon: icon || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&q=80' };
-      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       await setDoc(doc(window.db, "categories", catObj.id), catObj);
       closeModal('addCategoryModal');
       document.getElementById('newCatName').value = '';
@@ -965,7 +965,7 @@
       const targetCat = categories.find(c => c.name === catName);
       if (!targetCat) return;
       targetCat.icon = newIcon;
-      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+      const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       await setDoc(doc(window.db, "categories", targetCat.id), targetCat);
       closeModal('categoryActionsModal');
       alert('تم تحديث الأيقونة بنجاح!');
@@ -976,7 +976,7 @@
       const targetCat = categories.find(c => c.name === catName);
       if (!targetCat) return;
       if (confirm('هل أنت متأكد من حذف هذه الفئة؟')) {
-        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        const { deleteDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
         await deleteDoc(doc(window.db, "categories", targetCat.id));
         closeModal('categoryActionsModal');
         alert('تم حذف الفئة بنجاح!');
@@ -1017,7 +1017,7 @@
       const userObj = registeredUsers.find(u => u.username === username);
       if (userObj) {
         userObj.role = newRole;
-        const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firestore.js");
+        const { setDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
         await setDoc(doc(window.db, "users", username), userObj);
         loadUsersList();
       }
