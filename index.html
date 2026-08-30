@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق المزامنة</title>
-    <!-- استدعاء مكتبة قاعدة البيانات Supabase -->
+    <title>تطبيق المزامنة السحابية</title>
+    <!-- استدعاء مكتبة Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: Tahoma, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
+        body { font-family: Tahoma, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; direction: rtl; }
         .hidden { display: none; }
-        input, button { padding: 10px; margin: 5px; font-size: 16px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        input, button { padding: 10px; margin: 5px; font-size: 16px; width: 80%; max-width: 300px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
+        th { background: #007bff; color: white; }
     </style>
 </head>
 <body>
@@ -21,55 +22,100 @@
         <h2>تسجيل الدخول / لوحة الأدمن</h2>
         <input type="text" id="username" placeholder="اسم المستخدم" autocomplete="off" value=""><br>
         <input type="password" id="password" placeholder="كلمة المرور" autocomplete="new-password" value=""><br>
-        <button onclick="login()">دخول</button>
+        <button onclick="loginUser()">دخول / إنشاء حساب</button>
     </div>
 
-    <!-- الشاشة الرئيسية بعد الدخول -->
+    <!-- الشاشة الرئيسية بعد الدخول والمزامنة -->
     <div id="app-screen" class="hidden">
-        <h2>لوحة التحكم والمزامنة</h2>
-        <input type="text" id="product-name" placeholder="أدخل اسم المنتج أو البيانات"><br>
-        <button onclick="addProduct()">إضافة وتحديث للكل</button>
+        <h2 id="welcome-msg">لوحة التحكم والمزامنة</h2>
+        
+        <div>
+            <input type="text" id="product-name" placeholder="أدخل اسم المنتج أو البيانات"><br>
+            <button onclick="addProduct()" style="background: #28a745; color: white; border: none; cursor: pointer;">إضافة وتحديث للكل</button>
+        </div>
 
-        <h3>فتح الكاميرا الخلفية مباشرة</h3>
-        <button onclick="openBackCamera()">فتح الكاميرا</button><br>
-        <video id="camera-preview" autoplay playsinline style="width: 100%; max-width: 300px; margin-top: 10px;"></video>
+        <hr style="margin: 20px 0;">
 
-        <h3>البيانات المتزامنة:</h3>
-        <table id="data-table">
+        <div>
+            <h3>تشغيل الكاميرا الخلفية مباشرة</h3>
+            <button onclick="openBackCamera()" style="background: #ffc107; border: none; cursor: pointer;">فتح الكاميرا</button><br>
+            <video id="camera-preview" autoplay playsinline style="width: 100%; max-width: 300px; margin-top: 10px; border-radius: 8px;"></video>
+        </div>
+
+        <h3>البيانات المتزامنة لحظياً:</h3>
+        <table>
             <thead>
-                <tr><th>البيانات</th></tr>
+                <tr><th>البيانات المضافة</th></tr>
             </thead>
             <tbody id="table-body">
-                <!-- البيانات هتيجي هنا لوحدها من السحاب -->
+                <!-- البيانات هتيجي هنا أوتوماتيك من السيرفر -->
             </tbody>
         </table>
+        
+        <br>
+        <button onclick="location.reload()" style="background: #dc3545; color: white; border: none;">تسجيل خروج</button>
     </div>
 
     <script>
-        // إعدادات قاعدة البيانات المجانية (هتتكتب هنا بيانات مشروعك على سوبابيس لاحقاً أو هنربطها برابطك)
-        // حالياً الكود مهيأ بالكامل ومستعد يشتغل أول ما نربطه.
-        
-        function login() {
-            const user = document.getElementById('username').value;
-            if(user) {
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('app-screen').classList.remove('hidden');
-                loadData();
+        // ربط قاعدة البيانات بمشروعك على Supabase
+        const SUPABASE_URL = "https://dixgxvjpbrazwljcprgd.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_36v9DdUV116TIrOrlGje9w_sBQmrn7s";
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // تسجيل الدخول أو إنشاء الحساب تلقائياً لو مش موجود
+        async function loginUser() {
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+
+            if(!user || !pass) {
+                alert('الرجاء كتابة اسم المستخدم وكلمة المرور');
+                return;
+            }
+
+            // فحص هل المستخدم موجود؟
+            const { data, error } = await _supabase
+                .from('users')
+                .select('*')
+                .eq('username', user)
+                .single();
+
+            if (data) {
+                // لو موجود، تحقق من الباسورد
+                if (data.password === pass) {
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('app-screen').classList.remove('hidden');
+                    document.getElementById('welcome-msg').innerText = `أهلاً بك، ${user}`;
+                    loadData();
+                } else {
+                    alert('كلمة المرور غير صحيحة!');
+                }
             } else {
-                alert('الرجاء كتابة اسم المستخدم');
+                // لو مش موجود، نعمل له إنشاء حساب جديد تلقائي
+                const { error: insertError } = await _supabase
+                    .from('users')
+                    .insert([{ username: user, password: pass }]);
+
+                if (!insertError) {
+                    alert('تم إنشاء حساب جديد بنجاح ودخولك للنظام!');
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('app-screen').classList.remove('hidden');
+                    document.getElementById('welcome-msg').innerText = `أهلاً بك، ${user}`;
+                    loadData();
+                } else {
+                    alert('حدث خطأ أثناء إنشاء الحساب.');
+                }
             }
         }
 
-        // كود تشغيل الكاميرا الخلفية مباشرة بدون قوائم مزعجة
+        // كود تشغيل الكاميرا الخلفية حصراً بدون قوائم مزعجة
         async function openBackCamera() {
             try {
                 const videoElement = document.getElementById('camera-preview');
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: "environment" } } // الكاميرا الخلفية حصراً
+                    video: { facingMode: { exact: "environment" } } // الكاميرا الخلفية
                 });
                 videoElement.srcObject = stream;
             } catch (error) {
-                // لو الجهاز مفيهوش كاميرا خلفية أساسية (مثل الكمبيوتر)، يفتح أي كاميرا متاحة بدل ما يعطل
                 try {
                     const videoElement = document.getElementById('camera-preview');
                     const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -80,16 +126,38 @@
             }
         }
 
-        function addProduct() {
-            const val = document.getElementById('product-name').value;
+        // إضافة منتج / بيانات جديدة وتحديثها للكل
+        async function addProduct() {
+            const val = document.getElementById('product-name').value.trim();
             if(!val) return;
-            // هنا بيتم إرسال البيانات لقاعدة البيانات عشان تسمع عند الكل فوراً
-            alert("تمت الإضافة بنجاح (جاهز للربط بالسحاب)");
-            document.getElementById('product-name').value = "";
+
+            const { error } = await _supabase
+                .from('products')
+                .insert([{ name: val }]);
+
+            if(!error) {
+                document.getElementById('product-name').value = "";
+                loadData();
+            } else {
+                alert('فشل في الإضافة');
+            }
         }
 
-        function loadData() {
-            // جلب البيانات المحدثة من السحاب لعرضها في الجدول
+        // جلب البيانات وعرضها وتحديثها
+        async function loadData() {
+            const { data, error } = await _supabase
+                .from('products')
+                .select('*')
+                .order('id', { ascending: false });
+
+            if(!error && data) {
+                const tbody = document.getElementById('table-body');
+                tbody.innerHTML = "";
+                data.forEach(item => {
+                    const row = `<tr><td>${item.name}</td></tr>`;
+                    tbody.innerHTML += row;
+                });
+            }
         }
     </script>
 </body>
